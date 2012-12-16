@@ -1,0 +1,29 @@
+# -*- coding: utf-8 -*-
+"""
+  This file is part of lisogo
+  :copyright: © Martin Richard - martiusweb.net
+  :license: Released under GNU/GPLv2 license
+"""
+
+# This is the lisogo main configuration file
+
+# Flask settings
+# See http://flask.pocoo.org/docs/config/ for a comprehensive of flask settings
+
+# Secret key, used to encrypt secured data
+SECRET_KEY = 'This must be secret'
+
+# Switch this value to enable debugging (really insecure)
+DEBUG = False
+
+# Name of the cookieset
+SESSION_COOKIE_NAME = 'lisogo_data'
+
+# Lisogo settings
+# Where lisogo errors are logged
+LOG_FILE = '/var/log/lisogo.log'
+
+# What level or messages are logged, the value must match one of the values
+# defined in the python logging module
+# see http://docs.python.org/2/library/logging.html
+LOG_LEVEL = 'WARNING'

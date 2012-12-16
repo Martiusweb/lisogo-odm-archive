@@ -1,0 +1,14 @@
+# Lisogo generated and customized content
+lisogo/config.py
+lisogo/static/lisogo.css
+lisogo/static/img/glyphicons-halflings.png
+lisogo/static/img/glyphicons-halflings-white.png
+lisogo/static/js/vendor
+
+# Developement directories
+venv/
+log/
+
+# Python Artifacts
+*.pyc
+*.pyo
