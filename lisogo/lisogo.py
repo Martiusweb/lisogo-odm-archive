@@ -6,7 +6,9 @@
   :license: Released under GNU/GPLv2 license
 """
 
-from flask import Flask
+from flask import Flask, g
+from pymongo import MongoClient
+import config
 
 """
 This file sets up the minimal configuration and environment objects used in
@@ -19,6 +21,7 @@ if __name__ == '__main__':
 else:
     from . import app
 
+# Configuration
 app.config.from_object('lisogo.config')
 
 # Initalizes logging handler
@@ -47,6 +50,27 @@ if not app.debug:
     def log_exception(sender, exception, **extra):
         sender.logger.debug('Uncaught exception %s', exception)
 
+# Set up the connection to mongodb
+def mongodb_connect():
+	return MongoClient(config.MONGODB_HOST, config.MONGODB_PORT)
+
+def mongodb_select_db(client):
+	return client[config.MONGODB_DB_NAME]
+
+# Initialize the connection before handling a request
+@app.before_request
+def mongo_auto_connect():
+	g.mongo = mongodb_connect()
+	g.db = mongodb_select_db(g.mongo)
+
+# Ensure the connection to mongodb is closed after a request is handled
+@app.teardown_request
+def mongo_auto_disconnect(exception):
+	g.db = None
+	g.mongo.disconnect()
+
 # Fire an http server if we want to run lisogo as a standalone application
+# Actually, I don't really fire lisogo app from this file, I use
+# ../run_lisogo.py instead
 if __name__ == '__main__':
     app.run()

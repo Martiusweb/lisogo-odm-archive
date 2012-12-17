@@ -28,6 +28,11 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 ### Set up your environment
 
+Dependencies you must install (and are not documented here) are the following:
+
+  * python2 (I only test lisogo with Python 2.7)
+  * mongodb
+
 You shoud create a virtualenv:
 
     virtualenv venv -p `which python2`
@@ -39,7 +44,7 @@ Now you can start the virtual environement by sourcing `venv/bin/activate`,
 and install the dependencies:
 
     . venv/bin/activate
-    pip install Flask blinker
+    pip install Flask blinker pymongo
 
 We use bootstrap, available as a git submodule:
 

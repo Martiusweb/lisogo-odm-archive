@@ -27,3 +27,12 @@ LOG_FILE = '/var/log/lisogo.log'
 # defined in the python logging module
 # see http://docs.python.org/2/library/logging.html
 LOG_LEVEL = 'WARNING'
+
+# Mongodb server hostname
+MONGODB_HOST = 'localhost'
+
+# Mongodb server port
+MONGODB_PORT = 27017
+
+# Mongodb name of the database
+MONGODB_DB_NAME = 'lisogo'
