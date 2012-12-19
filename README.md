@@ -69,3 +69,8 @@ You then must build the css stylesheet from the less files, located in
 
 Test if lisogo is correctly set up by calling `run_lisogo.py`, open
 `http://127.0.0.1:5000` in your favorite firefox flavor.
+
+## Tests
+
+You can run unit tests by calling `run_test.py`.
+
