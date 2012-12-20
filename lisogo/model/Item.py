@@ -5,7 +5,7 @@
   :license: Released under GNU/GPLv2 license
 """
 
-import AbstractDocument
+from lisogo.model import AbstractDocument
 
 class Item(AbstractDocument):
 	"""
@@ -21,3 +21,17 @@ class Item(AbstractDocument):
 
 	def collection(self, db):
 	    return db.items
+
+	def getTitle(self):
+	    return self.title
+
+	def setTitle(self, title):
+	    self.title = title
+	    return self
+
+	def getDescription(self):
+	    return self.description
+
+	def setDescription(self, description):
+	    self.description = description
+	    return self

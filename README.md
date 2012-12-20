@@ -74,3 +74,14 @@ Test if lisogo is correctly set up by calling `run_lisogo.py`, open
 
 You can run unit tests by calling `run_test.py`.
 
+## A few notes about coding conventions
+
+The code conventions I use are pretty standard, but may not follow the most
+common practices in python. I'm sorry for this.
+
+In model classes, I use getters and setters since I like to make clear that
+these operations might be overloaded in the future. I guess it's not really
+pythonist either. I comment getters and setters only if they do something else
+than returning or setting a value (checks, side effects, signals emitted...).
+
+Setters return `self`.
