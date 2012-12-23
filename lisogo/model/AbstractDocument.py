@@ -7,6 +7,7 @@
 
 import abc
 from inspect import getmembers, ismethod
+from exceptions import PersistException
 
 class AbstractDocument:
     """
@@ -59,13 +60,20 @@ class AbstractDocument:
         """
         Returns the mongodb collection in which objects are stored.
 
+        If this method returns None, the object can only be stored has a nested
+        object.
+
         :param db: mongodb database object
         """
-        pass
+        return None
 
     def save(self, db):
         """
         Saves the document in the collection returned by :meth:`collection`.
+
+        If collection returns None, it means that the document can only be
+        saved as a nested document, and therefore can not be stored in
+        a collection. Such a situation will raise an Exception
 
         Returns the object for fluent API.
 
@@ -74,7 +82,15 @@ class AbstractDocument:
 
         :param db: mongodb database object
         """
-        self._id = self.collection(db).save(self.toSON())
+        collection = self.collection(db)
+
+        if not collection:
+            raise PersistException("The object of type %s can only be nested" \
+                " (no collection defined)" % self.__class__.__name__)
+
+        self._id = collection.save(self.toSON())
+
+        return self
 
     def fromSON(self, son):
         """

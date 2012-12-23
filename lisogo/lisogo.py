@@ -9,6 +9,7 @@
 from flask import Flask, g
 from pymongo import MongoClient
 import config
+from model import DocumentTransformer
 
 """
 This file sets up the minimal configuration and environment objects used in
@@ -51,23 +52,25 @@ if not app.debug:
         sender.logger.debug('Uncaught exception %s', exception)
 
 # Set up the connection to mongodb
-def mongodb_connect():
-	return MongoClient(config.MONGODB_HOST, config.MONGODB_PORT)
+def mongodb_connect(host = config.MONGODB_HOST, port = config.MONGODB_PORT):
+    return MongoClient(host, port)
 
-def mongodb_select_db(client):
-	return client[config.MONGODB_DB_NAME]
+def mongodb_select_db(client, db_name = config.MONGODB_DB_NAME, module = 'lisogo.model'):
+    db = client[db_name]
+    db.add_son_manipulator(DocumentTransformer(module))
+    return db
 
 # Initialize the connection before handling a request
 @app.before_request
 def mongo_auto_connect():
-	g.mongo = mongodb_connect()
-	g.db = mongodb_select_db(g.mongo)
+    g.mongo = mongodb_connect()
+    g.db = mongodb_select_db(g.mongo)
 
 # Ensure the connection to mongodb is closed after a request is handled
 @app.teardown_request
 def mongo_auto_disconnect(exception):
-	g.db = None
-	g.mongo.disconnect()
+    g.db = None
+    g.mongo.disconnect()
 
 # Fire an http server if we want to run lisogo as a standalone application
 # Actually, I don't really fire lisogo app from this file, I use

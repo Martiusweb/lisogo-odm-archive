@@ -8,8 +8,11 @@
 from unittest import TestCase, TestLoader
 from pymongo import MongoClient
 from tests import config
-from lisogo.model import AbstractDocument
+from lisogo import mongodb_connect, mongodb_select_db
+from lisogo.model import AbstractDocument, DocumentTransformer
+from lisogo.model.exceptions import PersistException
 
+# Stub classes
 class ConcreteDocument(AbstractDocument):
     def __init__(self, foo = '', bar = ''):
         AbstractDocument.__init__(self)
@@ -52,18 +55,8 @@ class AnotherConcrete(AbstractDocument):
         self.foo = foo
         return self
 
+# Basic tests of AbstractDocument
 class AbstractDocumentTest(TestCase):
-    def setUp(self):
-        self.con = MongoClient(config.MONGODB_HOST, config.MONGODB_PORT)
-        self.db = self.con[config.MONGODB_DB_NAME]
-
-    def tearDown(self):
-        self.db.concrete_collection.drop()
-        self.db = None
-        self.con.drop_database(config.MONGODB_DB_NAME)
-        self.con.disconnect()
-        self.con = None
-
     def test_initWithEmptyId(self):
         doc = ConcreteDocument()
         self.assertIsNone(doc.id())
@@ -146,10 +139,25 @@ class AbstractDocumentTest(TestCase):
 
         self.assertFalse("_type" in doc.__dict__)
 
+# Tests requiring an access to mongodb
+class AbstractStorageTest(TestCase):
+    def setUp(self):
+        self.con = mongodb_connect(config.MONGODB_HOST, config.MONGODB_PORT)
+        self.db = mongodb_select_db(self.con, config.MONGODB_DB_NAME, 'tests.lisogo.model')
+
+    def tearDown(self):
+        self.db = None
+        self.con.drop_database(config.MONGODB_DB_NAME)
+        self.con.disconnect()
+        self.con = None
+
+class AbstractDocumentStorageTest(AbstractStorageTest):
     def test_save(self):
         doc = ConcreteDocument('foo', 'bar')
         collection = doc.collection(self.db)
-        doc.save(self.db)
+        result = doc.save(self.db)
+
+        self.assertEqual(result, doc)
 
         doc_id = doc.id()
         self.assertIsNotNone(doc_id)
@@ -162,6 +170,7 @@ class AbstractDocumentTest(TestCase):
         self.assertEqual(other.getFoo(), doc.getFoo())
         self.assertEqual(other.getBar(), doc.getBar())
 
+# Test the behavior of the Abc
 class AbstractDocumentAbcTest(TestCase):
     def test_abstractMethodMustBeImplemented(self):
         class IncompleteConcrete(AbstractDocument):
@@ -170,3 +179,108 @@ class AbstractDocumentAbcTest(TestCase):
         with self.assertRaises(TypeError):
             doc = IncompleteConcrete()
 
+# Nested documents
+class NestedDocument(AbstractDocument):
+    def __init__(self, foo = ''):
+        AbstractDocument.__init__(self)
+
+        self.foo = foo
+
+    def collection(self, db):
+        return None
+
+    def __eq__(self, other):
+        return self.foo == other.foo
+
+class DocumentWithNested(AbstractDocument):
+    def __init__(self, data = '', nested = None):
+        AbstractDocument.__init__(self)
+
+        self.data = data
+
+        self.nested = nested
+
+    def setNested(self, nested):
+        self.nested = nested
+        return self
+
+    def getNested(self):
+        return self.nested
+
+    def collection(self, db):
+        return db.document_with_nested
+
+    def __eq__(self, other):
+        return self.data == other.data and self.nested == other.nested
+
+class SaveNestedDocumentTest(AbstractStorageTest):
+    def test_saveRaiseExceptionWhenNested(self):
+        doc = NestedDocument('foo')
+
+        with self.assertRaises(PersistException):
+            # I can provide None instead of a valid access to a database since
+            # an exception should be raisen before trying to access mongodb in
+            # any way.
+            doc.save(None)
+
+    def test_SaveDocumentWithNestedDocument(self):
+        doc = DocumentWithNested('foo', NestedDocument('bar'))
+        collection = doc.collection(self.db)
+        count_before_save = collection.count()
+
+        result = doc.save(self.db)
+
+        self.assertEqual(result, doc)
+        self.assertEqual(collection.count(), count_before_save+1)
+
+    def test_FindDocumentWithNestedDocument(self):
+        doc = DocumentWithNested('foo', NestedDocument('bar'))
+        doc.save(self.db)
+
+        collection = doc.collection(self.db)
+
+        retrieved = collection.find_one({"_id": doc._id})
+        retrieved_doc = DocumentWithNested()
+        retrieved_doc.fromSON(retrieved)
+
+        self.assertEqual(retrieved['nested'], doc.nested)
+        self.assertEqual(retrieved_doc, doc)
+
+class DocumentTransformerTest(TestCase):
+    def setUp(self):
+        self.transformer = DocumentTransformer('tests.lisogo.model')
+
+    def test_DocumentTransformerIncomingForSimpleDocument(self):
+        doc = ConcreteDocument('foo', 'bar')
+        son = doc.toSON()
+
+        transformed = self.transformer.transform_incoming(son.copy(), None)
+        self.assertEqual(transformed, son)
+
+    def test_DocumentTransformerIncomingForNestedDocument(self):
+        doc = DocumentWithNested('foo', NestedDocument('bar'))
+        son = doc.toSON()
+        nested_son = doc.nested.toSON()
+
+        transformed = self.transformer.transform_incoming(son.copy(), None)
+
+        self.assertEqual(transformed['data'], son['data'])
+        self.assertEqual(transformed['nested'], nested_son)
+
+    def test_DocumentTransformerOutgoingForSimpleDocument(self):
+        doc = ConcreteDocument('foo', 'bar')
+        son = doc.toSON()
+
+        transformed = self.transformer.transform_incoming(son.copy(), None)
+        back = self.transformer.transform_outgoing(transformed.copy(), None)
+
+        self.assertEqual(back, son)
+
+    def test_DocumentTransformerOutgoingForNestedDocument(self):
+        doc = DocumentWithNested('foo', NestedDocument('bar'))
+        son = doc.toSON()
+
+        transformed = self.transformer.transform_incoming(son.copy(), None)
+        back = self.transformer.transform_outgoing(transformed.copy(), None)
+
+        self.assertEqual(back['nested'], son['nested'])
