@@ -26,10 +26,11 @@ class AbstractDocument(object):
     dictionary and the object properties.
 
     :meth:`toSON` will insert into a dictionary the object members which are
-    not methods, and not starting by an underscore `_`. The only exception to
-    this rule is the property `_id`, which is used to store the document
-    identifier from mongodb. A custom `_type` field is added to the son
-    representation, containing the class name of `self`.
+    not methods, not in the list of :prop:`_ignoredFields` and not starting
+    by an underscore `_`. The only exception to this rule is the property
+    `_id`, which is used to store the document identifier from mongodb.
+    A custom `_type` field is added to the son representation, containing the
+    class name of `self`.
 
     :meth:`fromSON` is the reverse operation, it populates the object's members
     with those in the dictionary.
@@ -44,25 +45,34 @@ class AbstractDocument(object):
         """
         Constructs the document.
 
-        Sets an empty _id field.
+        Sets an empty _id field and default value for metadata.
+
+        :prop:`_ignoredFields` In concrete implementations of a document, it
+        is possible to ignore fields when converting the object in SON by
+        appending property names to the list.
         """
         self._id = None
+        self._ignoredFields = ['id']
 
+    @property
     def id(self):
         """
         Returns the id of the document, or `None` if the document has not been
         persisted yet.
+
+        id is a property.
         """
         return self._id
 
-    def fields_to_store(self):
+    def fieldsToStore(self):
         """
         Returns the list of fields of the current object that have to be
         stored.
         """
         return [member for member in getmembers(self)
-                if member[0][0] != '_' and not ismethod(member[1])]
-
+                if member[0][0] != '_'
+                    and member[0] not in self._ignoredFields
+                    and not ismethod(member[1])]
 
     @abc.abstractmethod
     def collection(self, db):
@@ -135,7 +145,7 @@ class AbstractDocument(object):
         if self._id != None:
             son['_id'] = self._id
 
-        for member in self.fields_to_store():
+        for member in self.fieldsToStore():
             son[member[0]] = member[1]
 
         son['_type'] = self.__class__.__name__

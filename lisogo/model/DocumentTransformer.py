@@ -61,7 +61,7 @@ class DocumentTransformer(SONManipulator):
             if collection and value.collection(collection.database):
                 # Save the document and use it as a reference
                 value.save(collection.database)
-                son[key] = value.id()
+                son[key] = value.id
             else:
                 # Serialize the nested document
                 son[key] = value.toSON()

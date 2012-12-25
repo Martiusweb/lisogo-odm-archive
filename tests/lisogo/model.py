@@ -59,7 +59,7 @@ class AnotherConcrete(AbstractDocument):
 class AbstractDocumentTest(TestCase):
     def test_initWithEmptyId(self):
         doc = ConcreteDocument()
-        self.assertIsNone(doc.id())
+        self.assertIsNone(doc.id)
 
     def test_toSONHasRequiredFields(self):
         foo = 'foo value'
@@ -91,7 +91,7 @@ class AbstractDocumentTest(TestCase):
     def test_idOfNewDocIsNone(self):
         doc = ConcreteDocument('foo', 'bar')
 
-        self.assertEqual(doc.id(), None)
+        self.assertEqual(doc.id, None)
 
     def test_fromSonChecksType(self):
         doc1 = ConcreteDocument('foo', 'bar')
@@ -129,7 +129,7 @@ class AbstractDocumentTest(TestCase):
         doc = ConcreteDocument()
         doc.fromSON(son)
 
-        self.assertEqual(doc.id(), an_id)
+        self.assertEqual(doc.id, an_id)
 
     def test_fromSONIgnoresType(self):
         son = {"foo": "foo", "bar": "bar", "_type": "ConcreteDocument"}
@@ -159,14 +159,14 @@ class AbstractDocumentStorageTest(AbstractStorageTest):
 
         self.assertEqual(result, doc)
 
-        doc_id = doc.id()
+        doc_id = doc.id
         self.assertIsNotNone(doc_id)
 
         son = collection.find_one({"_id": doc_id})
         other = ConcreteDocument('an', 'other')
         other.fromSON(son)
 
-        self.assertEqual(other.id(), doc.id())
+        self.assertEqual(other.id, doc.id)
         self.assertEqual(other.getFoo(), doc.getFoo())
         self.assertEqual(other.getBar(), doc.getBar())
 
