@@ -9,7 +9,7 @@ import abc
 from inspect import getmembers, ismethod
 from exceptions import PersistException
 
-class AbstractDocument:
+class AbstractDocument(object):
     """
     An `AbstractDocument` represents an object that can be converted and stored
     as a document in a mongodb instance.
@@ -54,6 +54,15 @@ class AbstractDocument:
         persisted yet.
         """
         return self._id
+
+    def fields_to_store(self):
+        """
+        Returns the list of fields of the current object that have to be
+        stored.
+        """
+        return [member for member in getmembers(self)
+                if member[0][0] != '_' and not ismethod(member[1])]
+
 
     @abc.abstractmethod
     def collection(self, db):
@@ -126,11 +135,7 @@ class AbstractDocument:
         if self._id != None:
             son['_id'] = self._id
 
-        for member in getmembers(self):
-            # ignore fields starting with an underscore and methods
-            if member[0][0] == '_' or ismethod(member[1]):
-                continue
-
+        for member in self.fields_to_store():
             son[member[0]] = member[1]
 
         son['_type'] = self.__class__.__name__
