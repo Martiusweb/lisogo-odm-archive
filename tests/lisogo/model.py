@@ -246,6 +246,22 @@ class SaveNestedDocumentTest(AbstractStorageTest):
         self.assertEqual(retrieved['nested'], doc.nested)
         self.assertEqual(retrieved_doc, doc)
 
+    def test_SaveDocumentWithReferenceToNewObject(self):
+        nested = ConcreteDocument('foo', 'bar')
+        doc = DocumentWithNested('foo', nested)
+
+        doc_collection = doc.collection(self.db)
+        nested_collection = nested.collection(self.db)
+
+        doc_count = doc_collection.count()
+        nested_count = doc_collection.count()
+
+        result = doc.save(self.db)
+
+        self.assertEqual(result, doc)
+        self.assertEqual(doc_collection.count(), doc_count+1)
+        self.assertEqual(nested_collection.count(), nested_count+1)
+
 class DocumentTransformerTest(TestCase):
     def setUp(self):
         self.transformer = DocumentTransformer('tests.lisogo.model')

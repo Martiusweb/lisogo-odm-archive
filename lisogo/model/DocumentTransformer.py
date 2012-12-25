@@ -42,8 +42,8 @@ class DocumentTransformer(SONManipulator):
         provide a collection to store them in
         (:meth:`AbstractDocument.collection`).
 
-        TODO: nested documents with a collection should be stored and
-        represented has references instead.
+        Nested documents with a collection are stored and represented has
+        references, using :class:`ObjectId` (form pymongo).
 
         :param son: the SON object to be inserted into the database
         :param collection: the collection the object is being inserted into
@@ -57,8 +57,14 @@ class DocumentTransformer(SONManipulator):
             if not isinstance(value, AbstractDocument):
                 continue
 
-            # Serialize the document
-            son[key] = value.toSON()
+            # Is it a document to reference or to store nested?
+            if collection and value.collection(collection.database):
+                # Save the document and use it as a reference
+                value.save(collection.database)
+                son[key] = value.id()
+            else:
+                # Serialize the nested document
+                son[key] = value.toSON()
 
         return son
 
