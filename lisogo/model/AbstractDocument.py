@@ -51,8 +51,44 @@ class AbstractDocument(object):
         is possible to ignore fields when converting the object in SON by
         appending property names to the list.
         """
-        self._id = None
-        self._ignoredFields = ['id']
+        object.__setattr__(self, '_id', None)
+        object.__setattr__(self, '_modified', False)
+        object.__setattr__(self, '_ignoredFields', ['id', 'modified'])
+
+    def attributeModified(self, attribute, value):
+        """
+        Returns wether setting the value `value` to the object's attribute
+        `attribute` will modify the current object SON representation.
+        """
+        try:
+            modified = self.__dict__[attribute] != value
+            return modified and attribute in self.fieldnamesToStore()
+        except KeyError:
+            try:
+                return self.__getattr__(attribute) != value
+            except AttributeError:
+                return True
+
+    def __setattr__(self, attribute, value):
+        """
+        Intercepts and redispatch attributes set operations in order to check
+        if the document have been modified.
+        """
+        if not self._modified:
+            object.__setattr__(self, '_modified', self.attributeModified(attribute, value))
+
+        return object.__setattr__(self, attribute, value)
+
+    @property
+    def modified(self):
+        """
+        Tells if the current object has been modified since the last time
+        :meth:`fromSON()` or :meth:`save()` have been called.
+
+        If the object is new, if no property that would appear in the SON
+        representation has been set, the object is not modified.
+        """
+        return self._modified
 
     @property
     def id(self):
@@ -64,15 +100,31 @@ class AbstractDocument(object):
         """
         return self._id
 
+    def ignoreMember(self, member):
+        """
+        Returns true if the memeber member should be ignored when creating the
+        SON representation of the object.
+
+        :param member: tuple (member name, member value)
+        """
+        return member[0][0] == '_' or member[0] in self._ignoredFields \
+                or ismethod(member[1])
+
     def fieldsToStore(self):
         """
         Returns the list of fields of the current object that have to be
-        stored.
+        exported by toSON.
         """
         return [member for member in getmembers(self)
-                if member[0][0] != '_'
-                    and member[0] not in self._ignoredFields
-                    and not ismethod(member[1])]
+                if not self.ignoreMember(member)]
+
+    def fieldnamesToStore(self):
+        """
+        Return as a list the name of each field in the current object that have
+        to be exported by toSON.
+        """
+        return [member[0] for member in getmembers(self)
+                if not self.ignoreMember(member)]
 
     @abc.abstractmethod
     def collection(self, db):
@@ -92,7 +144,10 @@ class AbstractDocument(object):
 
         If collection returns None, it means that the document can only be
         saved as a nested document, and therefore can not be stored in
-        a collection. Such a situation will raise an Exception
+        a collection. Such a situation will raise an Exception.
+
+        The method will not try to save a document that is not marked as
+        modified (by :prop:`modified`).
 
         Returns the object for fluent API.
 
@@ -101,6 +156,9 @@ class AbstractDocument(object):
 
         :param db: mongodb database object
         """
+        if not self.modified:
+            return self
+
         collection = self.collection(db)
 
         if not collection:
@@ -108,6 +166,8 @@ class AbstractDocument(object):
                 " (no collection defined)" % self.__class__.__name__)
 
         self._id = collection.save(self.toSON())
+
+        object.__setattr__(self, '_modified', False)
 
         return self
 
@@ -128,6 +188,8 @@ class AbstractDocument(object):
                 continue
 
             self.__dict__[key] = son[key]
+
+        object.__setattr__(self, '_modified', False)
 
 
     def toSON(self):

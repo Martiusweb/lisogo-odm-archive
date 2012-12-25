@@ -73,7 +73,7 @@ class AbstractDocumentTest(TestCase):
         self.assertEqual(son['foo'], foo)
         self.assertEqual(son['bar'], bar)
 
-    def test_toSONIgnoresUnderscoreMembers(self):
+    def test_toSONIgnoresUnderscoreAndIgnoredMembers(self):
         doc = ConcreteDocument('foo', 'bar')
         son = doc.toSON()
 
@@ -139,6 +139,46 @@ class AbstractDocumentTest(TestCase):
 
         self.assertFalse("_type" in doc.__dict__)
 
+    def test_emptyDocumentNotModified(self):
+        class ConcreteEmpty(AbstractDocument):
+            def __init__(self):
+                AbstractDocument.__init__(self)
+
+            def collection(self, db):
+                return None
+
+        doc = ConcreteEmpty()
+
+        self.assertFalse(doc.modified)
+
+    def test_newDocumentIsModified(self):
+        doc = ConcreteDocument('foo', 'bar')
+
+        self.assertTrue(doc.modified)
+
+    def test_notModifiedCases(self):
+        son = {"foo": "foo", "bar": "bar", "_type": "ConcreteDocument"}
+        doc = ConcreteDocument()
+        doc.fromSON(son)
+
+        self.assertFalse(doc.modified)
+
+        doc._ignoredField = 'changed'
+        self.assertFalse(doc.modified)
+
+        doc.setFoo(son["foo"])
+        self.assertFalse(doc.modified)
+
+    def test_modifiedAfterFromSONIsModified(self):
+        son = {"foo": "foo", "bar": "bar", "_type": "ConcreteDocument"}
+        doc = ConcreteDocument()
+        doc.fromSON(son)
+
+        doc.foo = 'other value'
+
+        self.assertTrue(doc.modified)
+
+
 # Tests requiring an access to mongodb
 class AbstractStorageTest(TestCase):
     def setUp(self):
@@ -169,6 +209,12 @@ class AbstractDocumentStorageTest(AbstractStorageTest):
         self.assertEqual(other.id, doc.id)
         self.assertEqual(other.getFoo(), doc.getFoo())
         self.assertEqual(other.getBar(), doc.getBar())
+
+    def test_afterSaveIsNotModified(self):
+        doc = ConcreteDocument('foo', 'bar')
+        doc.save(self.db)
+
+        self.assertFalse(doc.modified)
 
 # Test the behavior of the Abc
 class AbstractDocumentAbcTest(TestCase):
