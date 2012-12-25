@@ -67,6 +67,18 @@ class AbstractDocument(object):
             try:
                 return self.__getattr__(attribute) != value
             except AttributeError:
+                # We added a new attribute, invalidate the cache of fields if
+                # defined
+                try:
+                    del self._fields
+                except AttributeError:
+                    pass
+
+                try:
+                    del self._fieldnames
+                except AttributeError:
+                    pass
+
                 return True
 
     def __setattr__(self, attribute, value):
@@ -115,16 +127,26 @@ class AbstractDocument(object):
         Returns the list of fields of the current object that have to be
         exported by toSON.
         """
-        return [member for member in getmembers(self)
-                if not self.ignoreMember(member)]
+        try:
+            return self._fields
+        except AttributeError:
+            self._fields = [member for member in getmembers(self)
+                    if not self.ignoreMember(member)]
+
+            return self._fields
 
     def fieldnamesToStore(self):
         """
         Return as a list the name of each field in the current object that have
         to be exported by toSON.
         """
-        return [member[0] for member in getmembers(self)
-                if not self.ignoreMember(member)]
+        try:
+            return self._fieldnames
+        except AttributeError:
+            self._fieldnames = [member[0] for member in getmembers(self)
+                    if not self.ignoreMember(member)]
+
+            return self._fieldnames
 
     @abc.abstractmethod
     def collection(self, db):
