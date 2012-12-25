@@ -5,6 +5,15 @@ List of goals.
 This is a prototype of application made with Flask, Mongodb and Emberjs. I also
 used bootstrap and copy-pasted from html5 boilerplate.
 
+Currently, most of my work has been focused on writting an application
+boilerplate and a simple Object Document Mapper (ODM) that you can browse in
+`lisogo/model/AbstractDocument.py` and `lisogo/model/DocumentTransformer.py`.
+You can also have a look at the unit tests which should be pretty
+straighforward to understand.
+
+I'd love to hear from people who would like to comment and give me feedback,
+especially experienced pythonists.
+
 ## Licensing
 
 Copyright 2012 Martin Richard, martiusweb.net.
@@ -51,7 +60,7 @@ We use bootstrap, available as a git submodule:
     git submodule init
     git submodule install
 
-Please not that you will have to install bootstrap dependencies (including
+Please note that you will have to install bootstrap dependencies (including
 less, jshint, recess, etc).
 
 ### Install lisogo
@@ -74,14 +83,20 @@ Test if lisogo is correctly set up by calling `run_lisogo.py`, open
 
 You can run unit tests by calling `run_test.py`.
 
+## Documentation
+
+One should be able to generate code documentation using Sphinx, but I've tried
+yet.
+
 ## A few notes about coding conventions
 
 The code conventions I use are pretty standard, but may not follow the most
 common practices in python. I'm sorry for this.
 
-In model classes, I use getters and setters since I like to make clear that
-these operations might be overloaded in the future. I guess it's not really
-pythonist either. I comment getters and setters only if they do something else
-than returning or setting a value (checks, side effects, signals emitted...).
+In model classes, I currently use getters and setters since I like to make
+clear that these operations might be overloaded in the future. I guess it's not
+really pythonist either. I comment getters and setters only if they do
+something else than returning or setting a value (checks, side effects, signals
+emitted...). But I may change my mind very soon.
 
 Setters return `self`.
