@@ -7,7 +7,7 @@
 
 import abc
 from inspect import getmembers, ismethod
-from exceptions import PersistException
+from exceptions import *
 
 class AbstractDocument(object):
     """
@@ -166,7 +166,7 @@ class AbstractDocument(object):
 
         If collection returns None, it means that the document can only be
         saved as a nested document, and therefore can not be stored in
-        a collection. Such a situation will raise an Exception.
+        a collection. Such a situation will raise a :class:`PersistException`.
 
         The method will not try to save a document that is not marked as
         modified (by :prop:`modified`).
@@ -190,6 +190,46 @@ class AbstractDocument(object):
         self._id = collection.save(self.toSON())
 
         object.__setattr__(self, '_modified', False)
+
+        return self
+
+    def retrieve(self, spec_or_id, db):
+        """
+        Retrieves the document in the collection returned by
+        :meth:`collection`. If the document is found, it will populate the
+        current object, else, :class:`NotFoundError` will be raised.
+
+        If collection returns ``None``, it means that the document can not be
+        retrieved on its own and is nested in a parent document. Such
+        a situation will raise a :class:`RetrieveException`.
+
+        :param spec_or_id: dictionary with at least an `_id` field or any other
+        value licit value for the field "_id". The value can be
+        a `pymongo.ObjectId` object or a value that can be converted in
+        `ObjectId`.
+
+        :param db: mongodb database object
+        """
+        collection = self.collection(db)
+
+        if not collection:
+            raise RetrieveException("The object of type %s can only be " \
+                    "nested (no collection defined)" % self.__class__.__name__)
+
+        if isinstance(spec_or_id, dict):
+            if "_id" not in spec_or_id:
+                raise RetrieveException('"spec_or_id" as a dict must have ' \
+                        'an "_id" field.')
+        else:
+            spec_or_id = {"_id": spec_or_id}
+
+        found = collection.find_one(spec_or_id)
+
+        if not found:
+            raise NotFoundError("No object with id %s in %s's collection"
+                    % (spec_or_id["_id"], self.__class__.__name__))
+
+        self.fromSON(found)
 
         return self
 

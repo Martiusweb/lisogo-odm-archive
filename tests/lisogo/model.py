@@ -10,7 +10,7 @@ from pymongo import MongoClient
 from tests import config
 from lisogo import mongodb_connect, mongodb_select_db
 from lisogo.model import AbstractDocument, DocumentTransformer
-from lisogo.model.exceptions import PersistException
+from lisogo.model.exceptions import *
 
 # Stub classes
 class ConcreteDocument(AbstractDocument):
@@ -21,6 +21,9 @@ class ConcreteDocument(AbstractDocument):
         self.bar = bar
 
         self._ignoredField = 'Ignored value'
+
+    def __eq__(self, other):
+        return self.foo == other.foo and self.bar == other.bar
 
     def collection(self, db):
         return db.concrete_collection
@@ -216,6 +219,33 @@ class AbstractDocumentStorageTest(AbstractStorageTest):
 
         self.assertFalse(doc.modified)
 
+    def test_retrieve(self):
+        doc = ConcreteDocument('hello', 'world')
+        doc.save(self.db)
+
+        new_doc = ConcreteDocument()
+        new_doc.retrieve(doc.id, self.db)
+
+        self.assertEqual(new_doc, doc)
+
+        del new_doc
+        new_doc = ConcreteDocument()
+        doc.retrieve({"_id": doc.id}, self.db)
+
+    def test_retrieveRaiseExceptionWhenIdIsMissing(self):
+        doc = ConcreteDocument()
+
+        with self.assertRaises(RetrieveException):
+            doc.retrieve({"useless_field": "useless value"}, self.db)
+
+    def test_retrieveNonExistingRaiseNotFound(self):
+        doc = ConcreteDocument()
+        # ensure the query won't return an object
+        doc.collection(self.db).remove({"_id": "not_existing"})
+
+        with self.assertRaises(NotFoundError):
+            doc.retrieve("not_existing", self.db)
+
 # Test the behavior of the Abc
 class AbstractDocumentAbcTest(TestCase):
     def test_abstractMethodMustBeImplemented(self):
@@ -265,9 +295,15 @@ class SaveNestedDocumentTest(AbstractStorageTest):
 
         with self.assertRaises(PersistException):
             # I can provide None instead of a valid access to a database since
-            # an exception should be raisen before trying to access mongodb in
+            # an exception should be raised before trying to access mongodb in
             # any way.
             doc.save(None)
+
+    def test_retrieveRaiseExceptionWhenNested(self):
+        doc = NestedDocument('foo')
+
+        with self.assertRaises(RetrieveException):
+            doc.retrieve('dummy id', None)
 
     def test_SaveDocumentWithNestedDocument(self):
         doc = DocumentWithNested('foo', NestedDocument('bar'))
