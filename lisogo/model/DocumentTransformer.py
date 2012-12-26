@@ -21,10 +21,6 @@ class DocumentTransformer(SONManipulator):
       * http://api.mongodb.org/python/current/examples/custom_type.html
       * http://api.mongodb.org/python/current/api/pymongo/son_manipulator.html
 
-    TODO It is probably required to check if this transformer should handle
-    or not the son reprensentation that are given to him, like if other
-    transformers might also act.
-
     TODO A good thing to do would be to be able to fetch references lazily.
     """
 
