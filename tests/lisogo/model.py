@@ -341,8 +341,22 @@ class SaveNestedDocumentTest(AbstractStorageTest):
         result = doc.save(self.db)
 
         self.assertEqual(result, doc)
+        self.assertIsNotNone(doc.id)
+        self.assertIsNotNone(nested.id)
         self.assertEqual(doc_collection.count(), doc_count+1)
         self.assertEqual(nested_collection.count(), nested_count+1)
+
+    def test_RetrieveDocumentWithReferenceToObject(self):
+        nested = ConcreteDocument('foo', 'bar')
+        doc = DocumentWithNested('foo', nested)
+
+        doc.save(self.db)
+
+        other_doc = DocumentWithNested()
+        other_doc.retrieve(doc.id, self.db)
+
+        self.assertEqual(other_doc, doc)
+        self.assertEqual(other_doc.nested, nested)
 
 class DocumentTransformerTest(TestCase):
     def setUp(self):

@@ -6,6 +6,7 @@
 """
 
 from pymongo.son_manipulator import SONManipulator
+from bson.objectid import ObjectId
 from lisogo.model import AbstractDocument
 
 class DocumentTransformer(SONManipulator):
@@ -43,11 +44,13 @@ class DocumentTransformer(SONManipulator):
         (:meth:`AbstractDocument.collection`).
 
         Nested documents with a collection are stored and represented has
-        references, using :class:`ObjectId` (form pymongo).
+        references, using :class:`ObjectId` (form `bson`).
 
         :param son: the SON object to be inserted into the database
         :param collection: the collection the object is being inserted into
         """
+        types_mapping = {}
+
         for (key, value) in son.items():
             # Traverse nested dictionaries recursively
             if isinstance(value, dict):
@@ -62,9 +65,16 @@ class DocumentTransformer(SONManipulator):
                 # Save the document and use it as a reference
                 value.save(collection.database)
                 son[key] = value.id
+
+                # Store the type of the referenced object as we'll need it when
+                # doing the reverse operation
+                types_mapping[str(value.id)] = value.__class__.__name__
             else:
                 # Serialize the nested document
                 son[key] = value.toSON()
+
+        if len(types_mapping) > 0:
+            son['_types_mapping'] = types_mapping
 
         return son
 
@@ -84,14 +94,24 @@ class DocumentTransformer(SONManipulator):
         :param collection: the collection this object was stored in
         """
         for (key, value) in son.items():
-            if isinstance(value, dict):
+            if isinstance(value, ObjectId):
+                try:
+                    doctype = son['_types_mapping'][str(value)]
+                    document = self._create_document_from_doctype(doctype)
+                    document.retrieve(value, collection.database)
+                    son[key] = document
+                except KeyError as e:
+                    # No type mapping available, keep the object reference as it
+                    # is, since there is nothing else to do. I could have choose to
+                    # raise an exception, but it would forbid a user to use
+                    # ObjectId values that are not handled by us.
+                    pass
+
+            elif isinstance(value, dict):
                 if '_type' in value:
                     # This is a document we can handle
                     doctype = value['_type']
-                    if isinstance(doctype, unicode):
-                        doctype = doctype.encode('ascii', 'ignore')
-                    module = __import__(self.module, fromlist = [doctype])
-                    document = getattr(module, doctype)()
+                    document = self._create_document_from_doctype(doctype)
                     document.fromSON(value)
                     son[key] = document
                 else:
@@ -99,3 +119,18 @@ class DocumentTransformer(SONManipulator):
                     son[key] = self.transform_outgoing(value, collection)
 
         return son
+
+    def _create_document_from_doctype(self, doctype):
+        """
+        Creates an empty document of the type defined by :param:`doctype`.
+
+        :param doctype: string representation of a type, member of the module
+        defined at the creation of the transformer.
+        """
+        if isinstance(doctype, unicode):
+            doctype = doctype.encode('ascii', 'ignore')
+
+        module = __import__(self.module, fromlist = [doctype])
+        document = getattr(module, doctype)()
+
+        return document

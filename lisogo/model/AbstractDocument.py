@@ -245,8 +245,8 @@ class AbstractDocument(object):
         assert son['_type'] == self.__class__.__name__
 
         for key in son:
-            # ignore the type field
-            if key == '_type':
+            # ignore the fields containing types metadata
+            if key == '_type' or key == '_types_mapping':
                 continue
 
             self.__dict__[key] = son[key]
