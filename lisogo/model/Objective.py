@@ -5,9 +5,9 @@
   :license: Released under GNU/GPLv2 license
 """
 
-from lisogo.model import AbstractDocument
+from lisogo.model import abstract_document
 
-class Objective(AbstractDocument):
+class Objective(abstract_document.AbstractDocument):
 	"""
 	An `Objective` is a goal a users plan to achive or has achieved.
 

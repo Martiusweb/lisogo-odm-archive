@@ -10,5 +10,5 @@ from flask import Flask
 
 app = Flask(__name__)
 
-import views
-from lisogo import mongodb_connect, mongodb_select_db
+from lisogo import views
+from lisogo.application import mongodb_connect, mongodb_select_db

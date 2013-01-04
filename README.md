@@ -100,3 +100,9 @@ something else than returning or setting a value (checks, side effects, signals
 emitted...). But I may change my mind very soon.
 
 Setters return `self`.
+
+## TODO
+
+A known limitation of the ODM of lisogo is that all model classes must be in
+the same package, which is not suitable for bigger projects, and not really
+flexible.

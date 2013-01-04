@@ -5,9 +5,9 @@
   :license: Released under GNU/GPLv2 license
 """
 
-from lisogo.model import AbstractDocument
+from lisogo.model import abstract_document
 
-class Item(AbstractDocument):
+class Item(abstract_document.AbstractDocument):
 	"""
 	An `Item` object reprensents an item of a list.
 

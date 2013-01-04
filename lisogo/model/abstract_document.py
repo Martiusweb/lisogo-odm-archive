@@ -7,7 +7,8 @@
 
 import abc
 from inspect import getmembers, ismethod
-from exceptions import *
+from lisogo.model.exceptions import *
+from pymongo import collection as pymongo_collection
 
 class AbstractDocument(object):
     """
@@ -166,7 +167,7 @@ class AbstractDocument(object):
 
         If collection returns None, it means that the document can only be
         saved as a nested document, and therefore can not be stored in
-        a collection. Such a situation will raise a :class:`PersistException`.
+        a collection. Such a situation will raise a :class:`PersistError`.
 
         The method will not try to save a document that is not marked as
         modified (by :prop:`modified`).
@@ -184,7 +185,7 @@ class AbstractDocument(object):
         collection = self.collection(db)
 
         if not collection:
-            raise PersistException("The object of type %s can only be nested" \
+            raise PersistError("The object of type %s can only be nested" \
                 " (no collection defined)" % self.__class__.__name__)
 
         self._id = collection.save(self.toSON())
@@ -201,7 +202,7 @@ class AbstractDocument(object):
 
         If collection returns ``None``, it means that the document can not be
         retrieved on its own and is nested in a parent document. Such
-        a situation will raise a :class:`RetrieveException`.
+        a situation will raise a :class:`RetrieveError`.
 
         :param spec_or_id: dictionary with at least an `_id` field or any other
         value licit value for the field "_id". The value can be
@@ -213,17 +214,19 @@ class AbstractDocument(object):
         collection = self.collection(db)
 
         if not collection:
-            raise RetrieveException("The object of type %s can only be " \
+            raise RetrieveError("The object of type %s can only be " \
                     "nested (no collection defined)" % self.__class__.__name__)
 
         if isinstance(spec_or_id, dict):
             if "_id" not in spec_or_id:
-                raise RetrieveException('"spec_or_id" as a dict must have ' \
+                raise RetrieveError('"spec_or_id" as a dict must have ' \
                         'an "_id" field.')
         else:
             spec_or_id = {"_id": spec_or_id}
 
-        found = collection.find_one(spec_or_id)
+        # We use the original pymongo.collection.Collection class definition to
+        # be sure to get the original dict object.
+        found = pymongo_collection.Collection.find_one(collection, spec_or_id)
 
         if not found:
             raise NotFoundError("No object with id %s in %s's collection"

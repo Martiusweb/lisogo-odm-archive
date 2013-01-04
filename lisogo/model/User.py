@@ -5,9 +5,9 @@
   :license: Released under GNU/GPLv2 license
 """
 
-from lisogo.model import AbstractDocument
+from lisogo.model import abstract_document
 
-class User(AbstractDocument):
+class User(abstract_document.AbstractDocument):
 	"""
 	An `User` object reprensents an identified user on lisogo.
 

@@ -235,7 +235,7 @@ class AbstractDocumentStorageTest(AbstractStorageTest):
     def test_retrieveRaiseExceptionWhenIdIsMissing(self):
         doc = ConcreteDocument()
 
-        with self.assertRaises(RetrieveException):
+        with self.assertRaises(RetrieveError):
             doc.retrieve({"useless_field": "useless value"}, self.db)
 
     def test_retrieveNonExistingRaiseNotFound(self):
@@ -293,7 +293,7 @@ class SaveNestedDocumentTest(AbstractStorageTest):
     def test_saveRaiseExceptionWhenNested(self):
         doc = NestedDocument('foo')
 
-        with self.assertRaises(PersistException):
+        with self.assertRaises(PersistError):
             # I can provide None instead of a valid access to a database since
             # an exception should be raised before trying to access mongodb in
             # any way.
@@ -302,7 +302,7 @@ class SaveNestedDocumentTest(AbstractStorageTest):
     def test_retrieveRaiseExceptionWhenNested(self):
         doc = NestedDocument('foo')
 
-        with self.assertRaises(RetrieveException):
+        with self.assertRaises(RetrieveError):
             doc.retrieve('dummy id', None)
 
     def test_SaveDocumentWithNestedDocument(self):

@@ -8,8 +8,8 @@
 
 from flask import Flask, g
 from pymongo import MongoClient
-import config
 from model import DocumentTransformer
+from lisogo import config
 
 """
 This file sets up the minimal configuration and environment objects used in

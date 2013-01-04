@@ -7,7 +7,7 @@
 
 from pymongo.son_manipulator import SONManipulator
 from bson.objectid import ObjectId
-from lisogo.model import AbstractDocument
+from lisogo.model import abstract_document
 
 class DocumentTransformer(SONManipulator):
     """
@@ -21,6 +21,12 @@ class DocumentTransformer(SONManipulator):
       * http://api.mongodb.org/python/current/examples/custom_type.html
       * http://api.mongodb.org/python/current/api/pymongo/son_manipulator.html
 
+    .. note:: :clas::`SONManipulator` instances are not supposed to deal with
+    anything that is not a dict, and it is a prerequisite of the pymongo
+    library. Therefore, the :class:`DocumentTransformer` will only deal with
+    nested objects in a dictionary, and not work on the object at the first
+    level.
+
     TODO A good thing to do would be to be able to fetch references lazily.
     """
 
@@ -32,12 +38,12 @@ class DocumentTransformer(SONManipulator):
         """
         Manipulates a SON object to be stored in the database.
 
-        This method transforms `AbstractDocument` instances into dictionaries
-        that can be stored by mongodb, recursively.
+        This method transforms :class:`abstract_document.AbstractDocument`
+        instances into dictionaries that can be stored by mongodb, recursively.
 
         Nested documents are transformed and simply nested when they don't
         provide a collection to store them in
-        (:meth:`AbstractDocument.collection`).
+        (:meth:`abstract_document.AbstractDocument.collection`).
 
         Nested documents with a collection are stored and represented has
         references, using :class:`ObjectId` (form `bson`).
@@ -53,7 +59,7 @@ class DocumentTransformer(SONManipulator):
                 son[key] = self.transform_incoming(value, collection)
 
             # Not an abstract document, nothing to do here
-            if not isinstance(value, AbstractDocument):
+            if not isinstance(value, abstract_document.AbstractDocument):
                 continue
 
             # Is it a document to reference or to store nested?
@@ -79,7 +85,8 @@ class DocumentTransformer(SONManipulator):
         Transforms the SON object fetched from the database.
 
         Dictionaries with a field named `_type` will be transformed into the
-        matching `AbstractDocument` concrete implementation, recursively.
+        matching :class:`abstract_document.AbstractDocument` concrete
+        implementation, recursively.
 
         Nested documents (sub-dictionaries) are also transformed into plain
         python objects if they follow the same guidelines.
@@ -97,16 +104,18 @@ class DocumentTransformer(SONManipulator):
                     document.retrieve(value, collection.database)
                     son[key] = document
                 except KeyError as e:
-                    # No type mapping available, keep the object reference as it
-                    # is, since there is nothing else to do. I could have choose to
-                    # raise an exception, but it would forbid a user to use
-                    # ObjectId values that are not handled by us.
+                    # No type mapping available, keep the object reference as
+                    # it is, since there is nothing else to do. I could have
+                    # choose to raise an exception, but it would forbid a user
+                    # to use ObjectId values that are not handled by us.
                     pass
 
             elif isinstance(value, dict):
                 if '_type' in value:
                     # This is a document we can handle
                     doctype = value['_type']
+                    # TODO Maybe we should ignore importation errors and keep
+                    # the serialized document
                     document = self._create_document_from_doctype(doctype)
                     document.fromSON(value)
                     son[key] = document
