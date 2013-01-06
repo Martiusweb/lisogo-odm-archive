@@ -8,8 +8,8 @@
 from unittest import TestCase, TestLoader
 from pymongo import MongoClient
 from tests import config
-from lisogo import mongodb_connect, mongodb_select_db
-from lisogo.model import AbstractDocument, DocumentTransformer
+from lisogo.model import AbstractDocument, DocumentTransformer, mongo_client
+from lisogo.model.mongo_client import connect, select_db, Collection
 from lisogo.model.exceptions import *
 
 # Stub classes
@@ -24,6 +24,9 @@ class ConcreteDocument(AbstractDocument):
 
     def __eq__(self, other):
         return self.foo == other.foo and self.bar == other.bar
+
+    def __repr__(self):
+        return "(%s, %s)" % (self.foo, self.bar)
 
     def collection(self, db):
         return db.concrete_collection
@@ -181,12 +184,11 @@ class AbstractDocumentTest(TestCase):
 
         self.assertTrue(doc.modified)
 
-
 # Tests requiring an access to mongodb
 class AbstractStorageTest(TestCase):
     def setUp(self):
-        self.con = mongodb_connect(config.MONGODB_HOST, config.MONGODB_PORT)
-        self.db = mongodb_select_db(self.con, config.MONGODB_DB_NAME, 'tests.lisogo.model')
+        self.con = connect(config.MONGODB_HOST, config.MONGODB_PORT)
+        self.db = select_db(self.con, config.MONGODB_DB_NAME, 'tests.lisogo.model')
 
     def tearDown(self):
         self.db = None
@@ -205,9 +207,7 @@ class AbstractDocumentStorageTest(AbstractStorageTest):
         doc_id = doc.id
         self.assertIsNotNone(doc_id)
 
-        son = collection.find_one({"_id": doc_id})
-        other = ConcreteDocument('an', 'other')
-        other.fromSON(son)
+        other = collection.find_one({"_id": doc_id})
 
         self.assertEqual(other.id, doc.id)
         self.assertEqual(other.getFoo(), doc.getFoo())
@@ -230,7 +230,8 @@ class AbstractDocumentStorageTest(AbstractStorageTest):
 
         del new_doc
         new_doc = ConcreteDocument()
-        doc.retrieve({"_id": doc.id}, self.db)
+        new_doc.retrieve({"_id": doc.id}, self.db)
+        self.assertEqual(new_doc, doc)
 
     def test_retrieveRaiseExceptionWhenIdIsMissing(self):
         doc = ConcreteDocument()
@@ -321,11 +322,9 @@ class SaveNestedDocumentTest(AbstractStorageTest):
 
         collection = doc.collection(self.db)
 
-        retrieved = collection.find_one({"_id": doc._id})
-        retrieved_doc = DocumentWithNested()
-        retrieved_doc.fromSON(retrieved)
+        retrieved_doc = collection.find_one({"_id": doc._id})
 
-        self.assertEqual(retrieved['nested'], doc.nested)
+        self.assertEqual(retrieved_doc.getNested(), doc.getNested())
         self.assertEqual(retrieved_doc, doc)
 
     def test_SaveDocumentWithReferenceToNewObject(self):
@@ -396,3 +395,87 @@ class DocumentTransformerTest(TestCase):
         back = self.transformer.transform_outgoing(transformed.copy(), None)
 
         self.assertEqual(back['nested'], son['nested'])
+
+class MongoClientTest(AbstractStorageTest):
+    def test_DatabaseReturnsCollectionObjects(self):
+        collection = self.db.a_collection_for_this_test
+        self.assertIsInstance(collection, mongo_client.Collection)
+        collection.drop()
+
+        collection = self.db['a_collection_for_this_test']
+        self.assertIsInstance(collection, mongo_client.Collection)
+        collection.drop()
+
+        collection = self.db.create_collection('a_collection_for_this_test')
+        self.assertIsInstance(collection, mongo_client.Collection)
+        collection.drop()
+
+    def test_saveInCollection(self):
+        doc = ConcreteDocument('foo', 'bar')
+        collection = doc.collection(self.db)
+
+        doc_id = collection.save(doc)
+        self.assertIsNotNone(doc.id)
+
+        other_doc = ConcreteDocument()
+        other_doc.retrieve({'_id': doc_id}, self.db)
+
+        self.assertEqual(doc, other_doc)
+
+    def test_insertInCollection(self):
+        doc = ConcreteDocument('foo', 'bar')
+        collection = doc.collection(self.db)
+
+        doc_id = collection.insert(doc)
+        self.assertIsNotNone(doc.id)
+
+        other_doc = ConcreteDocument()
+        other_doc.retrieve({'_id': doc_id}, self.db)
+
+        self.assertEqual(doc, other_doc)
+
+    def test_insertListInCollection(self):
+        doc1 = ConcreteDocument('doc', 'no1')
+        doc2 = ConcreteDocument('doc', 'no2')
+
+        collection = doc1.collection(self.db)
+        collection.insert([doc1, doc2])
+
+        self.assertIsNotNone(doc1.id)
+        self.assertIsNotNone(doc2.id)
+
+        other_doc1 = ConcreteDocument()
+        other_doc1.retrieve({'_id': doc1.id}, self.db)
+        other_doc2 = ConcreteDocument()
+        other_doc2.retrieve({'_id': doc2.id}, self.db)
+
+        self.assertEqual(doc1, other_doc1)
+        self.assertEqual(doc2, other_doc2)
+
+
+    def test_updateInCollection(self):
+        doc = ConcreteDocument('foo', 'bar')
+        collection = doc.collection(self.db)
+        doc_id = collection.insert(doc)
+
+        doc.setFoo('coucou foo')
+        collection.update({'_id': doc_id}, doc)
+
+        other_doc = ConcreteDocument()
+        other_doc.retrieve({'_id': doc_id}, self.db)
+
+        self.assertEqual(doc.getFoo(), other_doc.getFoo())
+        self.assertEqual(doc, other_doc)
+
+    def test_find(self):
+        doc = ConcreteDocument('foo', 'bar')
+        doc.save(self.db)
+        collection = doc.collection(self.db)
+
+        found_doc = collection.find_one({'_id': doc.id})
+
+        self.assertEqual(found_doc, doc)
+
+        doc2 = ConcreteDocument('foo', 'baz')
+        doc2.save(self.db)
+        found_docs = collection.find({'_id': doc.id})

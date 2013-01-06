@@ -56,13 +56,28 @@ class AbstractDocument(object):
         object.__setattr__(self, '_modified', False)
         object.__setattr__(self, '_ignoredFields', ['id', 'modified'])
 
+    def _invalidateFieldsCache(self):
+        """
+        Invalidate the cache of field values.
+        """
+        try:
+            del self._fields
+        except AttributeError:
+            pass
+
     def attributeModified(self, attribute, value):
         """
         Returns wether setting the value `value` to the object's attribute
         `attribute` will modify the current object SON representation.
+
+        If the attribute is modified, the internal field caches are updated.
         """
         try:
             modified = self.__dict__[attribute] != value
+
+            if modified:
+                self._invalidateFieldsCache()
+
             return modified and attribute in self.fieldnamesToStore()
         except KeyError:
             try:
@@ -70,10 +85,7 @@ class AbstractDocument(object):
             except AttributeError:
                 # We added a new attribute, invalidate the cache of fields if
                 # defined
-                try:
-                    del self._fields
-                except AttributeError:
-                    pass
+                self._invalidateFieldsCache()
 
                 try:
                     del self._fieldnames
@@ -87,7 +99,7 @@ class AbstractDocument(object):
         Intercepts and redispatch attributes set operations in order to check
         if the document have been modified.
         """
-        if not self._modified:
+        if not self.ignoreMember(attribute):
             object.__setattr__(self, '_modified', self.attributeModified(attribute, value))
 
         return object.__setattr__(self, attribute, value)
@@ -188,7 +200,7 @@ class AbstractDocument(object):
             raise PersistError("The object of type %s can only be nested" \
                 " (no collection defined)" % self.__class__.__name__)
 
-        self._id = collection.save(self.toSON())
+        self._id = collection.save(self)
 
         object.__setattr__(self, '_modified', False)
 
@@ -226,7 +238,9 @@ class AbstractDocument(object):
 
         # We use the original pymongo.collection.Collection class definition to
         # be sure to get the original dict object.
-        found = pymongo_collection.Collection.find_one(collection, spec_or_id)
+        found = None
+        for item in pymongo_collection.Collection.find(collection, spec_or_id).limit(-1):
+            found = item
 
         if not found:
             raise NotFoundError("No object with id %s in %s's collection"

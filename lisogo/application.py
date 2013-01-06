@@ -7,9 +7,8 @@
 """
 
 from flask import Flask, g
-from pymongo import MongoClient
-from model import DocumentTransformer
 from lisogo import config
+from lisogo.model import mongo_client
 
 """
 This file sets up the minimal configuration and environment objects used in
@@ -53,12 +52,26 @@ if not app.debug:
 
 # Set up the connection to mongodb
 def mongodb_connect(host = config.MONGODB_HOST, port = config.MONGODB_PORT):
-    return MongoClient(host, port)
+    """
+    An overloaded version of :func:`lisogo.model.mongo_client.connect()` that
+    defines default values of the parameters from the application
+    configuration.
+
+    seealso:: Module :mod:`~lisogo.model.mongo_client` to learn more about what
+    :func:`connect()` does.
+    """
+    return mongo_client.connect(host, port)
 
 def mongodb_select_db(client, db_name = config.MONGODB_DB_NAME, module = 'lisogo.model'):
-    db = client[db_name]
-    db.add_son_manipulator(DocumentTransformer(module))
-    return db
+    """
+    An overloaded version of :func:`lisogo.model.mongo_client.select_db()` that
+    defines default values of the parameters from the application
+    configuration.
+
+    seealso:: Module :mod:`~lisogo.model.mongo_client` to learn more about what
+    :func:`select_db()` does.
+    """
+    mongo_client.select_db(client, db_name, module)
 
 # Initialize the connection before handling a request
 @app.before_request

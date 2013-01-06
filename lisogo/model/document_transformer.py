@@ -75,7 +75,7 @@ class DocumentTransformer(SONManipulator):
                 # Serialize the nested document
                 son[key] = value.toSON()
 
-        if len(types_mapping) > 0:
+        if types_mapping:
             son['_types_mapping'] = types_mapping
 
         return son
