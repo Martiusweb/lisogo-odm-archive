@@ -103,7 +103,7 @@ class DocumentTransformer(SONManipulator):
                     document = self._create_document_from_doctype(doctype)
                     document.retrieve(value, collection.database)
                     son[key] = document
-                except KeyError as e:
+                except KeyError:
                     # No type mapping available, keep the object reference as
                     # it is, since there is nothing else to do. I could have
                     # choose to raise an exception, but it would forbid a user

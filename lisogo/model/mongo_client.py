@@ -17,47 +17,6 @@ class Cursor(pymongo.cursor.Cursor):
     If the documents returned by the cursor can be unserialized as instances of
     a model class, they will be returned unserialized.
     """
-    def _unserialize(self, document):
-        """
-        Try to unserialize the document `document` into an instance of a model
-        class.
-
-        If the document does not have the required `_type` field, the document
-        will be returned in its original serialized form.
-
-        :param document: document to unserialize
-        """
-        # There is nothing we can do for this document, return it as it is.
-        if '_type' not in document:
-            return document
-
-        manipulator = self.__collection.database._get_document_transformer()
-
-        if manipulator:
-            # We found a document_transformer.DocumentTransformer, we can
-            # create an instance of the model and unserialize the document
-            doctype = document['_type']
-            instance = manipulator._create_document_from_doctype(doctype)
-            instance.fromSON(document)
-            document = instance
-
-        return document
-
-    def _transform_incoming_document(self, document):
-        """
-        Apply to the
-        :class:`lisogo.model.document_transformer.DocumentTransformer`
-        manipulators to the document.
-
-        :param document: Document to transform
-        """
-        manipulator = self.__collection.database._get_document_transformer()
-
-        if manipulator:
-            document = manipulator.transform_outgoing(document, self)
-
-        return document
-
     def next(self):
         """
         Returns the next element of the cursor, unserialized if possible.
@@ -65,9 +24,9 @@ class Cursor(pymongo.cursor.Cursor):
         document = super(Cursor, self).next()
 
         if not self.__manipulate:
-            document = self._transform_outgoing_document(document)
+            document = self.__collection._transform_outgoing_document(document)
 
-        return self._unserialize(document)
+        return self.__collection._unserialize(document)
 
 class Collection(pymongo.collection.Collection):
     """
@@ -82,9 +41,6 @@ class Collection(pymongo.collection.Collection):
 
     seealso:: `pymongo.collection.Collection` for the comprehensive
     documentation of this class.
-
-    TODO One of the next features I would like to implement is an instance
-    pooling feature, probably with a mixin, in order to make it optional.
 
     TODO It might be useful to offer some ODM features in a map-reduce context,
     I will investigate this later.
@@ -124,6 +80,47 @@ class Collection(pymongo.collection.Collection):
                 continue
 
             document = manipulator.transform_incoming(document, self)
+
+        return document
+
+    def _unserialize(self, document):
+        """
+        Try to unserialize the document `document` into an instance of a model
+        class.
+
+        If the document does not have the required `_type` field, the document
+        will be returned in its original serialized form.
+
+        :param document: document to unserialize
+        """
+        # There is nothing we can do for this document, return it as it is.
+        if '_type' not in document:
+            return document
+
+        manipulator = self.database._get_document_transformer()
+
+        if manipulator:
+            # We found a document_transformer.DocumentTransformer, we can
+            # create an instance of the model and unserialize the document
+            doctype = document['_type']
+            instance = manipulator._create_document_from_doctype(doctype)
+            instance.fromSON(document)
+            document = instance
+
+        return document
+
+    def _transform_incoming_document(self, document):
+        """
+        Apply to the
+        :class:`lisogo.model.document_transformer.DocumentTransformer`
+        manipulators to the document.
+
+        :param document: Document to transform
+        """
+        manipulator = self.database._get_document_transformer()
+
+        if manipulator:
+            document = manipulator.transform_outgoing(document, self)
 
         return document
 
