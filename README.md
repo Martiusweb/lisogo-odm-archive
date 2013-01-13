@@ -7,9 +7,11 @@ used bootstrap and copy-pasted from html5 boilerplate.
 
 Currently, most of my work has been focused on writting an application
 boilerplate and a simple Object Document Mapper (ODM) that you can browse in
-`lisogo/model/AbstractDocument.py` and `lisogo/model/DocumentTransformer.py`.
-You can also have a look at the unit tests which should be pretty
-straighforward to understand.
+`lisogo/model`. You can also have a look at the unit tests which should be
+pretty straighforward to understand.
+
+The ODM has now most of the features I want in order to start working on the
+actual application code, this is what I'm going to do next.
 
 I'd love to hear from people who would like to comment and give me feedback,
 especially experienced pythonists.
@@ -19,7 +21,8 @@ especially experienced pythonists.
 Copyright 2012 Martin Richard, martiusweb.net.
 
 tl;dr: GNU/GPLv2, don't use it if you want to make money with it, evil things
-like kill kittens.
+like kill kittens (The later is not a license statement, there is no usage
+restriction, even if it's about killing pets or be a bad person).
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -106,3 +109,6 @@ Setters return `self`.
 A known limitation of the ODM of lisogo is that all model classes must be in
 the same package, which is not suitable for bigger projects, and not really
 flexible.
+
+I will soon check my code with pychecker, some of the previous statements in
+the coding conventions section will soon be outdated.
