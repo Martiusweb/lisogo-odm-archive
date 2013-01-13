@@ -8,8 +8,11 @@
 import pymongo
 from lisogo.model import document_transformer
 from lisogo.model import abstract_document
+from lisogo.model import object_cache
 
 class Cursor(pymongo.cursor.Cursor):
+    _unique_already_returned = False
+
     """
     This class inherits from :class:`pymongo.cursor.Cursor` and decorates it
     with ODM features.
@@ -19,9 +22,40 @@ class Cursor(pymongo.cursor.Cursor):
     """
     def next(self):
         """
-        Returns the next element of the cursor, unserialized if possible.
+        Return the next element of the cursor, unserialized if possible.
+
+        It will try to query the cache of the collection without performing
+        a query to mongodb if:
+
+          * `fields` is `None`
+          * `spec` is defined for this cursor and contains and `_id`
+          * `skip` is `0`
+
+        If a query is performed and `fields` is `None`, the cache will be
+        queried with the id of the document found instead of unserializing and
+        issuing a new document object.
         """
+        if not self.__fields and self.__skip == 0 and self.__spec:
+            try:
+                if self._unique_already_returned:
+                    raise StopIteration
+
+                document = self.__collection.cache[self.__spec['_id']]
+                self._unique_already_returned = True
+                return document
+            except KeyError:
+                # The spec does not have an '_id' or the element is not in cache
+                pass
+
         document = super(Cursor, self).next()
+
+        # Try using the cache
+        if not self.__fields:
+            try:
+                return self.__collection.cache[document['_id']]
+            except KeyError:
+                # Element is not cached
+                pass
 
         if not self.__manipulate:
             document = self.__collection._transform_outgoing_document(document)
@@ -45,6 +79,38 @@ class Collection(pymongo.collection.Collection):
     TODO It might be useful to offer some ODM features in a map-reduce context,
     I will investigate this later.
     """
+
+    def __init__(self, database, name, create=False, **kwargs):
+        """
+        Create a mongo collection.
+
+        seealso: :meth:`pymongo.collection.Collection` for the comprehensive
+        documentation of this method.
+        """
+        super(Collection, self).__init__(database, name, create, **kwargs)
+
+        self._cache = object_cache.ObjectCache(is_enabled = False)
+
+    def set_cache(self, cache):
+        """
+        Set the :class:`ObjectCache` of this collection.
+
+        The cache keeps one instance of the objects created or retrieved with
+        this collection, allowing to manipulate only one instance of each
+        document.
+        """
+        if not isinstance(cache, object_cache.ObjectCache):
+            raise TypeError('Cache must be of type ObjectCache')
+
+        self._cache = cache
+
+    @property
+    def cache(self):
+        """
+        Return the :class:`ObjectCache` object.
+        """
+        return self._cache
+
     def _serialize(self, document, manipulate):
         """
         Serialize the document.
@@ -147,6 +213,7 @@ class Collection(pymongo.collection.Collection):
 
         if result:
             to_save._id = result
+            self._cache[result] = to_save
 
         return result
 
@@ -181,8 +248,10 @@ class Collection(pymongo.collection.Collection):
                 if (result and
                     isinstance(doc_or_docs[key], abstract_document.AbstractDocument)):
                     doc_or_docs[key]._id = result[key]
+                    self._cache[result[key]] = doc_or_docs[key]
         elif result and isinstance(doc_or_docs, abstract_document.AbstractDocument):
             doc_or_docs._id = result
+            self._cache[result] = doc_or_docs
 
         return result
 
@@ -202,10 +271,13 @@ class Collection(pymongo.collection.Collection):
         seealso:: :meth:`pymongo.collection.Collection.update` for the
         comprehensive documentation of this method.
         """
-        document = self._serialize(document, manipulate)
+        son = self._serialize(document, manipulate)
 
-        return super(Collection, self).update(spec, document, upsert,
+        result = super(Collection, self).update(spec, son, upsert,
                 manipulate, safe, multi, check_keys, **kwargs)
+
+        if result and 'err' in result and not result['err']:
+            self._cache[document.id] = document
 
     def find(self, *args, **kwargs):
         """
@@ -248,6 +320,60 @@ class Database(pymongo.database.Database):
 
     seealso:: :class:`Collection`
     """
+
+    def __init__(self, connection, name):
+        super(Database, self).__init__(connection, name)
+
+        # Wether we want to enable ObjectCache
+        self._cache_is_enabled = True
+
+        # Collection of caches
+        self._cache_collection = object_cache.ObjectCacheCollection()
+
+    def enable_cache(self):
+        """
+        If the cache is not for key in self._object_cache_per_collection:
+             enabled, enables it from now.
+        """
+        if not self._cache_is_enabled:
+            self._cache_is_enabled = True
+
+            self._cache_collection.enable_caches()
+
+    def disable_cache(self):
+        """
+        Disable every caches already existing.
+
+        It does not clear the existing caches, but only disable them. If they
+        are locally re-enabled, the objects already stored are still available.
+
+        If the cache is re-enabled globally (from the database), the objects
+        that are already cached are also still available.
+
+        :class:`Collection` objects issued when the cache is disabled from the
+        database will not get a cache.
+        """
+        if self._cache_is_enabled:
+            self._cache_is_enabled = False
+
+            self._cache_collection.disable_caches()
+
+    @property
+    def cache_is_enabled(self):
+        """
+        Return `True` if the cache is enabled (the default), or `False`
+        otherwise.
+
+        cache_is_enabled is a property.
+        """
+        return self._cache_is_enabled
+
+    def clear_cache(self):
+        """
+        Clears existing caches.
+        """
+        self._cache_collection.clear_caches()
+
     def __getattr__(self, name):
         """
         Get a collection of this database by name.
@@ -258,7 +384,15 @@ class Database(pymongo.database.Database):
 
         seealso:: :meth:`pymongo.Database.__getattr__`
         """
-        return Collection(self, name)
+
+        if self._cache_is_enabled:
+            collection = Collection(self, name)
+            cache = self._cache_collection.get_cache(name, create_if_needed = True)
+            collection.set_cache(cache)
+
+            return collection
+        else:
+            return Collection(self, name)
 
     def create_collection(self, name, **kwargs):
         """
@@ -266,11 +400,19 @@ class Database(pymongo.database.Database):
 
         seealso:: :meth:`pymongo.Database.create_collection`
         """
-        super(Database, self).create_collection(name, **kwargs)
+        opts = {"create": True}
+        opts.update(kwargs)
 
-        return Collection(self, name, **kwargs)
+        if name in self.collection_names():
+            raise CollectionInvalid("collection %s already exists" % name)
+
+        return self.__getattr__(name)
 
     def add_son_manipulator(self, manipulator):
+        """
+        Add a new son manipulator to this database.
+        seealso:: :meth:`pymongo.Database.add_son_manipulator`
+        """
         if isinstance(manipulator, document_transformer.DocumentTransformer):
             self._document_transformer = manipulator
 
@@ -281,7 +423,7 @@ class Database(pymongo.database.Database):
 
 def connect(host = 'localhost', port = 27017):
     """
-    Returns an instance of :class:`pymongo.MongoClient`, dealing with the
+    Return an instance of :class:`pymongo.MongoClient`, dealing with the
     connection to a mongo node.
 
     :param host: mongo node host address, the default value is `localhost`
@@ -293,7 +435,7 @@ def connect(host = 'localhost', port = 27017):
 
 def select_db(client, db_name, module):
     """
-    Returns an instance of  :class:`pymongo.Database` object.
+    Return an instance of  :class:`pymongo.Database` object.
 
     TODO Create instead an instance of :class:`lisogo.model.Database`,
     a decorated :class:`pymongo.Database` object.

@@ -7,8 +7,10 @@
 
 from unittest import TestCase, TestLoader
 from pymongo import MongoClient
+from bson.objectid import ObjectId
 from tests import config
-from lisogo.model import AbstractDocument, DocumentTransformer, mongo_client
+from lisogo.model import AbstractDocument, DocumentTransformer, mongo_client, \
+    object_cache
 from lisogo.model.mongo_client import connect, select_db, Collection
 from lisogo.model.exceptions import *
 
@@ -306,7 +308,7 @@ class SaveNestedDocumentTest(AbstractStorageTest):
         with self.assertRaises(RetrieveError):
             doc.retrieve('dummy id', None)
 
-    def test_SaveDocumentWithNestedDocument(self):
+    def test_saveDocumentWithNestedDocument(self):
         doc = DocumentWithNested('foo', NestedDocument('bar'))
         collection = doc.collection(self.db)
         count_before_save = collection.count()
@@ -316,7 +318,7 @@ class SaveNestedDocumentTest(AbstractStorageTest):
         self.assertEqual(result, doc)
         self.assertEqual(collection.count(), count_before_save+1)
 
-    def test_FindDocumentWithNestedDocument(self):
+    def test_findDocumentWithNestedDocument(self):
         doc = DocumentWithNested('foo', NestedDocument('bar'))
         doc.save(self.db)
 
@@ -327,7 +329,7 @@ class SaveNestedDocumentTest(AbstractStorageTest):
         self.assertEqual(retrieved_doc.getNested(), doc.getNested())
         self.assertEqual(retrieved_doc, doc)
 
-    def test_SaveDocumentWithReferenceToNewObject(self):
+    def test_saveDocumentWithReferenceToNewObject(self):
         nested = ConcreteDocument('foo', 'bar')
         doc = DocumentWithNested('foo', nested)
 
@@ -397,6 +399,10 @@ class DocumentTransformerTest(TestCase):
         self.assertEqual(back['nested'], son['nested'])
 
 class MongoClientTest(AbstractStorageTest):
+    def setUp(self):
+        super(MongoClientTest, self).setUp()
+        self.db.disable_cache()
+
     def test_DatabaseReturnsCollectionObjects(self):
         collection = self.db.a_collection_for_this_test
         self.assertIsInstance(collection, mongo_client.Collection)
@@ -478,4 +484,216 @@ class MongoClientTest(AbstractStorageTest):
 
         doc2 = ConcreteDocument('foo', 'baz')
         doc2.save(self.db)
-        found_docs = collection.find({'_id': doc.id})
+
+        docs_found = [None, None]
+        for found in collection.find({'foo': 'foo'}):
+            if found.id == doc.id:
+                docs_found[0] = found
+            elif found.id == doc2.id:
+                docs_found[1] = found
+
+        self.assertEqual(docs_found[0], doc)
+        self.assertEqual(docs_found[1], doc2)
+
+class ObjectCacheTest(TestCase):
+    def setUp(self):
+        self.object = object_cache.ObjectCache()
+        self.foo = ObjectId()
+
+    def tearDown(self):
+        self.object = None
+
+    def test_defaultIsEnabledEmpty(self):
+        self.assertTrue(self.object.is_enabled)
+        self.assertEqual(len(self.object), 0)
+
+    def test_disableAtConstruction(self):
+        o = object_cache.ObjectCache(False)
+        self.assertFalse(o.is_enabled)
+
+    def test_standardDictBehavior(self):
+        if self.foo in self.object:
+            del self.object[self.foo]
+
+        self.assertFalse(self.foo in self.object)
+
+        length = len(self.object)
+        self.object[self.foo] = 'bar'
+
+        self.assertEqual(len(self.object), length+1)
+        self.assertEqual(self.object[self.foo], 'bar')
+        self.assertTrue(self.foo in self.object)
+
+        del self.object[self.foo]
+
+        self.assertFalse(self.foo in self.object)
+
+    def test_whenDisabled(self):
+        self.object[self.foo] = 'bar'
+
+        self.object.is_enabled = False
+        self.assertFalse(self.foo in self.object)
+        self.assertEqual(len(self.object), 0)
+
+        bar = ObjectId()
+        self.object[bar] = 'foo'
+        self.object.is_enabled = True
+        self.assertFalse(bar in self.object)
+        self.assertEqual(len(self.object), 1)
+
+# TODO
+class ObjectCacheCollectionTest(TestCase):
+    def setUp(self):
+        self.object = object_cache.ObjectCacheCollection()
+
+    def tearDown(self):
+        self.object = None
+
+    def test_getAndsetCache(self):
+        cache = object_cache.ObjectCache()
+        self.object.set_cache('foo', cache)
+
+        self.assertIs(self.object.get_cache('foo'), cache)
+
+    def test_missingRaiseKeyError(self):
+        cache = object_cache.ObjectCache()
+
+        with self.assertRaises(KeyError):
+            cache['does not exists']
+
+    def test_enableCaches(self):
+        cache = object_cache.ObjectCache(is_enabled = False)
+        self.object.set_cache('foo', cache)
+        self.object_cache.enable_caches()
+
+        self.assertTrue(cache.is_enabled)
+
+    def test_disableCaches(self):
+        cache = object_cache.ObjectCache()
+        self.object.set_cache('foo', cache)
+        self.object.disable_caches()
+
+        self.assertFalse(cache.is_enabled)
+
+    def test_enableCaches(self):
+        cache = object_cache.ObjectCache()
+        doc_id = ObjectId()
+        cache[doc_id] = 'foo'
+
+        self.object.set_cache('foo', cache)
+
+        self.object.clear_caches()
+
+        self.assertEqual(len(cache), 0)
+
+class DatabaseCacheTest(AbstractStorageTest):
+    def test_defaultCacheIsEnabled(self):
+        self.assertTrue(self.db.cache_is_enabled)
+
+    def test_enableDisableCache(self):
+        self.db.enable_cache()
+        self.assertTrue(self.db.cache_is_enabled)
+
+        self.db.disable_cache()
+        self.assertFalse(self.db.cache_is_enabled)
+
+        self.db.enable_cache()
+        self.assertTrue(self.db.cache_is_enabled)
+
+    def test_createCacheForCollection(self):
+        self.db.enable_cache()
+
+        collection = self.db.collection
+        self.assertIsNotNone(collection.cache)
+        collection.drop()
+
+class CollectionCacheTest(AbstractStorageTest):
+    def test_setCache(self):
+        collection = self.db.collection
+
+        cache = object_cache.ObjectCache()
+        collection.set_cache(cache)
+
+        self.assertIs(collection.cache, cache)
+        collection.drop()
+
+    def test_addInCacheOnSave(self):
+        doc = ConcreteDocument('foo', 'bar')
+        collection = doc.collection(self.db)
+
+        doc_id = collection.save(doc)
+
+        self.assertIs(collection.cache[doc_id], doc)
+
+    def test_addInCacheOnSaveNestedWithRef(self):
+        nested_doc = ConcreteDocument('hello', 'world')
+        doc = DocumentWithNested('what', nested_doc)
+
+        doc.save(self.db)
+
+        nested_collection = nested_doc.collection(self.db)
+        self.assertIs(nested_collection.cache[nested_doc.id], nested_doc)
+        self.assertIs(doc.collection(self.db).cache[doc.id], doc)
+
+    def test_addInCacheOnInsertOne(self):
+        doc = ConcreteDocument('foo', 'bar')
+        collection = doc.collection(self.db)
+
+        doc_id = collection.insert(doc)
+
+        self.assertIs(collection.cache[doc_id], doc)
+
+    def test_addInCacheOnInsertSeveral(self):
+        doc1 = ConcreteDocument('foo', 'bar')
+        doc2 = ConcreteDocument('bar', 'baz')
+        collection = doc1.collection(self.db)
+
+        collection.insert([doc1, doc2])
+
+        self.assertIs(collection.cache[doc1.id], doc1)
+        self.assertIs(collection.cache[doc2.id], doc2)
+
+    def test_addInCacheOnUpdate(self):
+        doc = ConcreteDocument('foo', 'first')
+        collection = doc.collection(self.db)
+
+        self.db.disable_cache()
+        doc_id = collection.insert(doc)
+        self.db.enable_cache()
+
+        doc.setBar('second')
+        collection.update({"_id": doc_id}, doc)
+
+        self.assertIs(collection.cache[doc_id], doc)
+
+    def test_findReturnsCachedObjectIfIdIsInCache(self):
+        doc = ConcreteDocument('foo', 'first')
+        collection = doc.collection(self.db)
+
+        doc_id = collection.insert(doc)
+
+        for result in collection.find({'_id': doc_id}).limit(-1):
+            self.assertIs(result, doc)
+
+    def test_findReturnsCachedObjectAfterRetrieval(self):
+        doc = ConcreteDocument('foo', 'bar')
+        doc.save(self.db)
+        collection = doc.collection(self.db)
+
+        found_doc = collection.find_one({'_id': doc.id})
+
+        self.assertEqual(found_doc, doc)
+
+        doc2 = ConcreteDocument('foo', 'baz')
+        doc2.save(self.db)
+
+        docs_found = [None, None]
+        for found in collection.find({'foo': 'foo'}):
+            if found.id == doc.id:
+                docs_found[0] = found
+            elif found.id == doc2.id:
+                docs_found[1] = found
+
+        self.assertIs(docs_found[0], doc)
+        self.assertIs(docs_found[1], doc2)
+
