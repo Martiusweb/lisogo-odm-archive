@@ -315,6 +315,8 @@ class Database(pymongo.database.Database):
     several :class:`lisogo.model.document_transformer.DocumentTransformer` SON
     manipulators are added to the same database instance.
 
+    By default, caching and lazy loading are enabled.
+
     seealso:: :class:`pymongo.database.Database` for the comprehensive
     documentation of this class.
 
@@ -327,13 +329,15 @@ class Database(pymongo.database.Database):
         # Wether we want to enable ObjectCache
         self._cache_is_enabled = True
 
+        # Wether we want to enable lazy loading
+        self._lazy_loading_is_enabled = True
+
         # Collection of caches
         self._cache_collection = object_cache.ObjectCacheCollection()
 
     def enable_cache(self):
         """
-        If the cache is not for key in self._object_cache_per_collection:
-             enabled, enables it from now.
+        If the cache is not enabled, enables it from now.
         """
         if not self._cache_is_enabled:
             self._cache_is_enabled = True
@@ -357,6 +361,30 @@ class Database(pymongo.database.Database):
             self._cache_is_enabled = False
 
             self._cache_collection.disable_caches()
+
+    def enable_lazy_loading(self):
+        """
+        Enable the lazy loading feature.
+
+        Lazy loading is a feature that allow to retrieve nested documents
+        referenced by their id only when the user will try to access them,
+        minimizing the work done with the database.
+        """
+        self._lazy_loading_is_enabled = True
+
+    def disable_lazy_loading(self):
+        """
+        Disable the lazy loading feature.
+
+        Lazy loading will only be disabled from now. It means that documents
+        already retrieved and/or in cache containing references to other
+        documents will keep the lazy loading feature enabled.
+        """
+        self._lazy_loading_is_enabled = False
+
+    @property
+    def lazy_loading_is_enabled(self):
+        return self._lazy_loading_is_enabled
 
     @property
     def cache_is_enabled(self):
@@ -384,7 +412,6 @@ class Database(pymongo.database.Database):
 
         seealso:: :meth:`pymongo.Database.__getattr__`
         """
-
         if self._cache_is_enabled:
             collection = Collection(self, name)
             cache = self._cache_collection.get_cache(name, create_if_needed = True)

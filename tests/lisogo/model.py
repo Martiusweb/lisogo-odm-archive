@@ -10,7 +10,7 @@ from pymongo import MongoClient
 from bson.objectid import ObjectId
 from tests import config
 from lisogo.model import AbstractDocument, DocumentTransformer, mongo_client, \
-    object_cache
+    object_cache, document_placeholder
 from lisogo.model.mongo_client import connect, select_db, Collection
 from lisogo.model.exceptions import *
 
@@ -541,7 +541,7 @@ class ObjectCacheTest(TestCase):
         self.assertFalse(bar in self.object)
         self.assertEqual(len(self.object), 1)
 
-# TODO
+# Test caching features
 class ObjectCacheCollectionTest(TestCase):
     def setUp(self):
         self.object = object_cache.ObjectCacheCollection()
@@ -697,3 +697,64 @@ class CollectionCacheTest(AbstractStorageTest):
         self.assertIs(docs_found[0], doc)
         self.assertIs(docs_found[1], doc2)
 
+# Lazy loading
+class DocumentPlaceholderTest(AbstractStorageTest):
+    def test_retrieveDocumentUsingPlaceholder(self):
+        doc = ConcreteDocument('foo', 'bar')
+        doc.save(self.db)
+
+        placeholder = document_placeholder.DocumentPlaceholder(
+            doc.collection(self.db), doc.id)
+
+        retrieved = placeholder.retrieve()
+
+        self.assertEqual(retrieved, doc)
+
+class DatabaseLazyLoadingTest(AbstractStorageTest):
+    def test_defaultLazyLoadingIsEnabled(self):
+        self.assertTrue(self.db.lazy_loading_is_enabled)
+
+    def test_enableDisableLazyLoading(self):
+        self.db.enable_lazy_loading()
+        self.assertTrue(self.db.lazy_loading_is_enabled)
+
+        self.db.disable_lazy_loading()
+        self.assertFalse(self.db.lazy_loading_is_enabled)
+
+        self.db.enable_lazy_loading()
+        self.assertTrue(self.db.lazy_loading_is_enabled)
+
+class LazyloadingTest(AbstractStorageTest):
+    def test_hasPlaceholderWhenLazyLoadingEnabled(self):
+        self.db.enable_lazy_loading()
+        self.db.disable_cache()
+
+        nested = ConcreteDocument('foo', 'bar')
+        doc = DocumentWithNested('foo', nested)
+        doc.save(self.db)
+
+        collection = doc.collection(self.db)
+
+        retrieved_doc = collection.find_one({"_id": doc._id})
+
+        self.assertIsInstance(object.__getattribute__(retrieved_doc, 'nested'),
+                document_placeholder.DocumentPlaceholder)
+
+        self.assertEqual(retrieved_doc.getNested(), nested)
+
+    def test_hasDocumentWhenLazyLoadingDisabled(self):
+        self.db.disable_lazy_loading()
+        self.db.disable_cache()
+
+        nested = ConcreteDocument('foo', 'bar')
+        doc = DocumentWithNested('foo', nested)
+        doc.save(self.db)
+
+        collection = doc.collection(self.db)
+
+        retrieved_doc = collection.find_one({"_id": doc._id})
+
+        self.assertIsInstance(object.__getattribute__(retrieved_doc, 'nested'),
+                ConcreteDocument)
+
+        self.assertEqual(retrieved_doc.getNested(), nested)

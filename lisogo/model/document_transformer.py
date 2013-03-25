@@ -7,7 +7,7 @@
 
 from pymongo.son_manipulator import SONManipulator
 from bson.objectid import ObjectId
-from lisogo.model import abstract_document
+from lisogo.model import abstract_document, document_placeholder
 
 class DocumentTransformer(SONManipulator):
     """
@@ -26,8 +26,6 @@ class DocumentTransformer(SONManipulator):
     library. Therefore, the :class:`DocumentTransformer` will only deal with
     nested objects in a dictionary, and not work on the object at the first
     level.
-
-    TODO A good thing to do would be to be able to fetch references lazily.
     """
 
     def __init__(self, module = 'lisogo.model'):
@@ -91,7 +89,15 @@ class DocumentTransformer(SONManipulator):
         Nested documents (sub-dictionaries) are also transformed into plain
         python objects if they follow the same guidelines.
 
-        TODO: References are replaced by the corresponding python object.
+        It is important to note that the behavior with nested references change
+        whether lazy loading is enabled or not. When nested documents are
+        fetched eagerly, the method used is :meth:`AbstractDocument.retrieve()`
+        which does not use the cache and guarantee that the document will be
+        returned as it is known in the database.
+
+        However, lazy loading's :class:`DocumentPlaceholder` leverages the
+        cache feature if enabled. This behavior is consistent with the intent
+        of lazy loading in term of performance optimization.
 
         :param son: the SON object being retrieved from the database
         :param collection: the collection this object was stored in
@@ -101,8 +107,14 @@ class DocumentTransformer(SONManipulator):
                 try:
                     doctype = son['_types_mapping'][str(value)]
                     document = self._create_document_from_doctype(doctype)
-                    document.retrieve(value, collection.database)
-                    son[key] = document
+
+                    if collection.database.lazy_loading_is_enabled:
+                        placeholder = document_placeholder.DocumentPlaceholder(
+                            document.collection(collection.database), value)
+                        son[key] = placeholder
+                    else:
+                        document.retrieve(value, collection.database)
+                        son[key] = document
                 except KeyError:
                     # No type mapping available, keep the object reference as
                     # it is, since there is nothing else to do. I could have

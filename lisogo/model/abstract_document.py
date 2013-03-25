@@ -9,6 +9,7 @@ import abc
 from inspect import getmembers, ismethod
 from lisogo.model.exceptions import *
 from pymongo import collection as pymongo_collection
+from lisogo.model import document_placeholder
 
 class AbstractDocument(object):
     """
@@ -35,11 +36,7 @@ class AbstractDocument(object):
 
     :meth:`fromSON` is the reverse operation, it populates the object's members
     with those in the dictionary.
-
-    Nested documents and references are not yet supported (but will come soon,
-    I guess).
     """
-
     __metaclass__ = abc.ABCMeta
 
     def __init__(self):
@@ -103,6 +100,17 @@ class AbstractDocument(object):
             object.__setattr__(self, '_modified', self.attributeModified(attribute, value))
 
         return object.__setattr__(self, attribute, value)
+
+    def __getattribute__(self, attribute):
+        value = object.__getattribute__(self, attribute)
+
+        if isinstance(value, document_placeholder.DocumentPlaceholder):
+            # Retrive the document
+            value = value.find()
+            # Replace the placeholder by the document
+            object.__setattr__(self, attribute, value)
+
+        return value
 
     @property
     def modified(self):
@@ -212,14 +220,16 @@ class AbstractDocument(object):
         :meth:`collection`. If the document is found, it will populate the
         current object, else, :class:`NotFoundError` will be raised.
 
+        Note that :meth:`retrieve` does not leverage the caching feature and
+        will always perform a query to the database.
+
         If collection returns ``None``, it means that the document can not be
         retrieved on its own and is nested in a parent document. Such
         a situation will raise a :class:`RetrieveError`.
 
         :param spec_or_id: dictionary with at least an `_id` field or any other
-        value licit value for the field "_id". The value can be
-        a `pymongo.ObjectId` object or a value that can be converted in
-        `ObjectId`.
+        licit value for the field "_id". The value can be a `pymongo.ObjectId`
+        object or a value that can be converted in `ObjectId`.
 
         :param db: mongodb database object
         """
